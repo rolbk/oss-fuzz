@@ -107,7 +107,7 @@ fuzz_compile () {
     -Dbin_dummy_emulation=bin_vanilla_emulation -W -Wall -MT \
     fuzz_$dst.o -MD -MP -c -o fuzz_$dst.o fuzz_$src.c
 }
-for i in objdump readelf nm objcopy windres ranlib_simulation strings addr2line dwarf; do
+for i in objdump readelf nm objcopy objcopy_options windres ranlib_simulation strings addr2line dwarf; do
   fuzz_compile $i $i ""
 done
 
@@ -142,6 +142,7 @@ fl["objdump_safe"]=${OBJ3}
 fl["dwarf"]=${OBJ3}
 fl["addr2line"]=${OBJ1}
 fl["objcopy"]="rename.o rddbg.o debug.o stabs.o rdcoff.o wrstabs.o ${OBJ1}"
+fl["objcopy_options"]="rename.o rddbg.o debug.o stabs.o rdcoff.o wrstabs.o ${OBJ1}"
 fl["nm"]="${OBJ1} demanguse.o"
 fl["dlltool"]="defparse.o deflex.o ${OBJ1}"
 fl["windres"]="resrc.o rescoff.o resbin.o rcparse.o rclex.o winduni.o resres.o ${OBJ1}"
@@ -178,8 +179,18 @@ done
 # Seed targeted the pef file format
 cp $SRC/binary-samples/oss-fuzz-binutils/fuzz_bfd_ext_seed_corpus.zip $OUT/fuzz_bfd_ext_seed_corpus.zip
 
+# Build prefixed seed corpus for objcopy_options
+OBJCP_PREF=$(mktemp -d)
+unzip -q $SRC/binary-samples/oss-fuzz-binutils/general_seeds.zip -d "$OBJCP_PREF"
+# prepend 256×0x00 to every file
+find "$OBJCP_PREF" -type f -print0 | while IFS= read -r -d '' f; do
+  (dd if=/dev/zero bs=1 count=256 status=none; cat "$f") > "${f}.tmp" && mv "${f}.tmp" "$f"
+done
+(cd "$OBJCP_PREF" && zip -q -r $OUT/fuzz_objcopy_options_seed_corpus.zip .)
+rm -rf "$OBJCP_PREF"
+
 # Copy options files
-for ft in readelf readelf_pef readelf_elf32_csky readelf_elf64_mmix readelf_elf32_littlearm readelf_elf32_bigarm objcopy objdump dlltool disas_ext-bfd_arch_csky nm as windres objdump_safe ranlib_simulation addr2line dwarf; do
+for ft in readelf readelf_pef readelf_elf32_csky readelf_elf64_mmix readelf_elf32_littlearm readelf_elf32_bigarm objcopy objcopy_options objdump dlltool disas_ext-bfd_arch_csky nm as windres objdump_safe ranlib_simulation addr2line dwarf; do
   echo "[libfuzzer]" > $OUT/fuzz_${ft}.options
   echo "detect_leaks=0" >> $OUT/fuzz_${ft}.options
 done
