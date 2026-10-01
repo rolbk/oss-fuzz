@@ -70,6 +70,43 @@ fi
 # Now compile the src/binutils fuzzers
 cd ../binutils
 
+# ────────────────────────────────────────────────────────────────────
+# Build a standalone, sanitised "strings" *before* we patch the source
+# (the sed command below will replace main(), which we do NOT want here)
+# ────────────────────────────────────────────────────────────────────
+echo "[+] Building instrumented strings utility"
+
+# Object files the real strings normally links with
+STRINGS_EXTRA_OBJS="bucomm.o version.o filemode.o"
+
+# Static libraries already produced by the first 'make'
+STATIC_LIBS="../opcodes/libopcodes.a \
+             ../libctf/.libs/libctf.a \
+             ../bfd/.libs/libbfd.a \
+             ../zlib/libz.a \
+             ../libsframe/.libs/libsframe.a \
+             ../libiberty/libiberty.a"
+
+# 1. Compile strings.c with *exactly* the fuzz-compile flags
+$CC $CFLAGS \
+    -DHAVE_CONFIG_H \
+    -DOBJDUMP_PRIVATE_VECTORS=\"\" \
+    -I. -I../bfd -I./../bfd -I./../include -I./../zlib \
+    -DLOCALEDIR=\"/usr/local/share/locale\" \
+    -Dbin_dummy_emulation=bin_vanilla_emulation \
+    -W -Wall \
+    -c strings.c -o strings.o
+
+# 2. Link it statically; NO $LIB_FUZZING_ENGINE => normal binary
+$CXX $CXXFLAGS \
+     -W -Wall -I./../zlib \
+     -o "$OUT/strings_asan" \
+     strings.o $STRINGS_EXTRA_OBJS \
+     -Wl,--start-group $STATIC_LIBS -Wl,--end-group
+
+echo "[+]   -> $OUT/strings ready (ASan & UBSan enabled)"
+# ────────────────────────────────────────────────────────────────────
+
 # Compile the fuzzers.
 # The general strategy is to remove main functions such that the fuzzer (which has its own main)
 # can link against the code.
